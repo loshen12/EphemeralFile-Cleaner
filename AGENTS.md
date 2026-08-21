@@ -99,17 +99,21 @@ models.py / exceptions.py 数据层：FileMatch/ScanResult/CleanOutcome/RiskDeci
 
 ### Commit Message 规则
 
-- 标题（subject）：≤ 50 字符，祈使句（imperative），无句号结尾；例如 `add agent-json batch input`、`fix high-risk bypass in non-interactive`。可用冒号前缀限定范围：`config: reject targets default`、`cleaner: add disk-space precheck`
-- 正文（body）：标题后空一行，说明变更**原因（why）**，而非只罗列做了什么（what）；可附关联 Task ID（plan.md 的 T0xx）与被修复的问题
+- 格式：`type(scope): subject`——`type` 取 `feat`/`fix`/`refactor`/`docs`/`test`/`chore`/`build`/`style`/`perf`；`scope` 填受影响模块/组件（如 `config`、`scanner`、`cleaner`、`cli`、`repl`、`agent`、`docs`）
+- 标题：≤ 50 字符，祈使句（imperative），无句号结尾；例如 `feat(api): 新增查询接口限流控制`、`fix(cleaner): 修复非交互高危绕过`
+- 正文（body）：标题后空一行，说明变更**原因（why）**，而非只罗列做了什么（what）
+- Footer：正文后空一行，关联 `Task: Txxx`（plan.md 任务编号）或 `Fix: #xxx`（issue 编号）
 - 禁止提交信息中出现模板占位、无意义表述；一个逻辑变更一个提交，未完成/未验证的变更不提交
 
 示例：
 
 ```
-scanner: record first matching pattern
+feat(scanner): 记录首个命中模式
 
 按模式汇总清理总结时每个文件需要唯一归属，避免同一文件在
-多模式统计中被重复计数。关联 plan.md T007。
+多模式统计中被重复计数。
+
+Task: T007
 ```
 
 ### Git 操作约束
