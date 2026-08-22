@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T020 已完成**，进度 20/27（25 / 37 人天 ≈ 67.6%）；下一任务 **T021**。
+> 当前状态：**T001-T021 已完成**，进度 21/27（27 / 37 人天 ≈ 73.0%）；下一任务 **T022**。
 
 ## 1. 里程碑
 
@@ -121,7 +121,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T017、T018、T019｜**工作量**：1 人天｜**产出**：`tests/test_cli.py`（TestScan/TestClean/TestRepl）
 - **验收**：text 模式用例全绿；覆盖 Spec §14 test_cli 对应域
 
-### T021 — task 子命令与 patterns 命令
+### T021 — task 子命令与 patterns 命令 ✅（2026-08-23）
 
 - **依赖**：T004、T005、T016｜**工作量**：2 人天｜**产出**：`cli.py` task 子命令组 + patterns 命令
 - **验收**：`task add --name/--dir/--pattern.../--default` 写盘；同名更新去重/`--replace-patterns` 替换；`task list` 显示 default 标记与设置；`task remove` 生效；`patterns` 全部/`--task`/空清单 exit 0/`--json` 信封；坏正则/目录不存在 → exit 2 不写盘

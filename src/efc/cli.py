@@ -29,13 +29,16 @@ from efc.cleaner import Cleaner
 from efc.config import (
     AppConfig,
     Task,
+    add_task,
     default_tasks,
     list_tasks,
     load_config,
     merge_overrides,
     read_env_overrides,
     read_stdin_payload,
+    remove_task,
     resolve_task,
+    save_config,
 )
 from efc.exceptions import ConfigError, EfcError
 from efc.journal import ExecutionLog, build_record
@@ -131,6 +134,199 @@ def _env_flag(name: str) -> bool:
 
 
 # ---------- 输入合并与任务解析（scan/clean/repl 共用，Spec §4.3/§4.4）----------
+
+
+@app.callback()
+@_translate
+def main_options(
+    ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", help="显示版本号并退出"),
+    format_opt: str = typer.Option(
+        None, "--format", help="输出格式：text（人类可读）| json（Agent 单行信封）"
+    ),
+    non_interactive: bool = typer.Option(
+        False, "--non-interactive", help="无头模式：确认自动通过（高危仍拒绝），全程无 input()"
+    ),
+    stdin_opt: bool = typer.Option(
+        False, "--stdin", help="从 stdin 读取 JSON 负载作为参数来源"
+    ),
+) -> None:
+    """全局回调：解析传输级选项并存入 ctx.obj。"""
+    state = AgentState()
+    if format_opt is not None:
+        if format_opt not in ("text", "json"):
+            raise ConfigError(f"--format 的值无效: {format_opt}（期望 text/json）")
+        state.format = format_opt
+        state.format_explicit = True
+    elif (env_fmt := os.environ.get("EFC_FORMAT")) in ("text", "json"):
+        state.format = env_fmt
+    state.non_interactive = non_interactive or _env_flag("EFC_NON_INTERACTIVE")
+    state.stdin = stdin_opt
+    ctx.obj = state
+    if version:
+        print(f"efc {__version__}")
+        raise typer.Exit()
+
+
+@app.command()
+@_translate
+def repl(
+    ctx: typer.Context,
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="输出详细诊断信息"),
+) -> None:
+    """交互会话（text 模式专用；Agent 标志一律拒绝）。"""
+    state: AgentState = ctx.obj or AgentState()
+    if state.format == "json" or state.non_interactive or state.stdin:
+        raise ConfigError(
+            "repl 不支持 Agent 模式标志（--format json / --non-interactive / --stdin），"
+            "自动化请使用 scan / clean"
+        )
+    cfg = load_config(Path(config).expanduser() if config else None)
+    ReplSession(cfg, ConsoleUI()).run()
+
+
+def _load_for_write(config: str | None) -> tuple[AppConfig, Path]:
+    """写命令（task add/remove）的配置加载与落盘路径。
+
+    显式 --config（或 EFC_CONFIG）必须存在；否则按查找链取已存在的
+    配置文件；都没有则从默认配置开始、保存到 ./config.json。
+    """
+    explicit = config or os.environ.get("EFC_CONFIG")
+    if explicit:
+        path = Path(explicit).expanduser()
+        return load_config(path), path
+    cwd_cfg = Path.cwd() / "config.json"
+    if cwd_cfg.is_file():
+        return load_config(cwd_cfg), cwd_cfg
+    user_cfg = Path("~/.efc/config.json").expanduser()
+    if user_cfg.is_file():
+        return load_config(user_cfg), user_cfg
+    return AppConfig(), cwd_cfg
+
+
+def _task_view(t: Task) -> dict[str, Any]:
+    return {"name": t.name, "dir": str(t.dir), "patterns": list(t.patterns),
+            "recursive": t.recursive, "default": t.default}
+
+
+@task_app.command("add")
+@_translate
+def task_add(
+    ctx: typer.Context,
+    name: str = typer.Option(..., "--name", help="任务名（全清单唯一）"),
+    dir_opt: str = typer.Option(None, "--dir", help="目标目录（新增必填，须已存在）"),
+    pattern: list[str] = typer.Option(None, "--pattern", help="文件名正则（可重复，追加去重）"),
+    recursive: bool | None = typer.Option(
+        None, "--recursive/--no-recursive", help="三态：未指定则保持原设置"
+    ),
+    default: bool | None = typer.Option(
+        None, "--default/--no-default", help="标记/取消默认任务"
+    ),
+    replace_patterns: bool = typer.Option(
+        False, "--replace-patterns", help="整体替换 patterns（默认追加去重）"
+    ),
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+) -> None:
+    """新增/更新任务并写盘（同名更新仅覆盖显式字段）。"""
+    state: AgentState = ctx.obj or AgentState()
+    fmt = _command_fmt(state, False)
+    cfg, path = _load_for_write(config)
+    add_task(cfg, name=name, dir=dir_opt,
+             patterns=list(pattern) if pattern else None,
+             recursive=recursive, default=default,
+             replace_patterns=replace_patterns)
+    save_config(cfg, path)
+    data = {"saved": True, "task": _task_view(resolve_task(cfg, name)),
+            "config_file": str(path)}
+    if fmt == "json":
+        emit_success(data)
+    else:
+        typer.echo(f"已保存任务 {name}（{len(resolve_task(cfg, name).patterns)} 条规则）"
+                   f" → {path}")
+
+
+@task_app.command("list")
+@_translate
+def task_list(
+    ctx: typer.Context,
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+    json_flag: bool = typer.Option(False, "--json", help="--format json 简写"),
+) -> None:
+    """列出任务清单与持久化配置。"""
+    state: AgentState = ctx.obj or AgentState()
+    fmt = _command_fmt(state, json_flag)
+    cfg = load_config(Path(config).expanduser() if config else None)
+    data: dict[str, Any] = {
+        "tasks": [_task_view(t) for t in list_tasks(cfg)],
+        "confirm": cfg.confirm, "max_batch": cfg.max_batch,
+        "backup_enabled": cfg.backup_enabled, "backup_dir": str(cfg.backup_dir),
+        "ignore_case": cfg.ignore_case, "log_enabled": cfg.log_enabled,
+        "log_file": str(cfg.log_file),
+        "high_risk_dirs": [str(p) for p in cfg.high_risk_dirs],
+    }
+    if fmt == "json":
+        emit_success(data)
+        return
+    if not cfg.tasks:
+        typer.echo("（任务清单为空：用 efc task add --name ... --dir ... --pattern ... 添加）")
+        return
+    for t in cfg.tasks:
+        mark = " [默认]" if t.default else ""
+        rec = "递归" if t.recursive else "顶层"
+        typer.echo(f"{t.name}{mark}: {t.dir}（{rec}）")
+        for p in t.patterns:
+            typer.echo(f"  - {p}")
+
+
+@task_app.command("remove")
+@_translate
+def task_remove(
+    ctx: typer.Context,
+    name: str = typer.Option(None, "--name", help="按任务名移除"),
+    dir_opt: str = typer.Option(None, "--dir", help="按目标目录移除"),
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+) -> None:
+    """移除任务（--name 与 --dir 二选一）。"""
+    state: AgentState = ctx.obj or AgentState()
+    fmt = _command_fmt(state, False)
+    cfg, path = _load_for_write(config)
+    removed = remove_task(cfg, name=name, dir=dir_opt)
+    if removed:
+        save_config(cfg, path)
+    if fmt == "json":
+        emit_success({"removed": removed})
+    else:
+        typer.echo("已移除任务" if removed else "未找到匹配的任务")
+
+
+@app.command()
+@_translate
+def patterns(
+    ctx: typer.Context,
+    task: str = typer.Option(None, "--task", help="只看指定任务"),
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+    json_flag: bool = typer.Option(False, "--json", help="--format json 简写"),
+) -> None:
+    """查看任务规则清单（全部或单个任务）。"""
+    state: AgentState = ctx.obj or AgentState()
+    fmt = _command_fmt(state, json_flag)
+    cfg = load_config(Path(config).expanduser() if config else None)
+    selected = [resolve_task(cfg, task)] if task else list_tasks(cfg)
+    data = {"tasks": [
+        {"task": t.name, "dir": str(t.dir), "default": t.default,
+         "patterns": list(t.patterns)}
+        for t in selected
+    ]}
+    if fmt == "json":
+        emit_success(data)
+        return
+    if not selected:
+        typer.echo("（任务清单为空）")
+        return
+    for t in selected:
+        mark = " [默认]" if t.default else ""
+        typer.echo(f"{t.name}{mark} → {', '.join(t.patterns) if t.patterns else '（无规则）'}")
 
 
 @dataclass
@@ -374,54 +570,6 @@ def clean(
         raise typer.Exit(code=code)
 
 
-@app.callback()
-@_translate
-def main_options(
-    ctx: typer.Context,
-    version: bool = typer.Option(False, "--version", help="显示版本号并退出"),
-    format_opt: str = typer.Option(
-        None, "--format", help="输出格式：text（人类可读）| json（Agent 单行信封）"
-    ),
-    non_interactive: bool = typer.Option(
-        False, "--non-interactive", help="无头模式：确认自动通过（高危仍拒绝），全程无 input()"
-    ),
-    stdin_opt: bool = typer.Option(
-        False, "--stdin", help="从 stdin 读取 JSON 负载作为参数来源"
-    ),
-) -> None:
-    """全局回调：解析传输级选项并存入 ctx.obj。"""
-    state = AgentState()
-    if format_opt is not None:
-        if format_opt not in ("text", "json"):
-            raise ConfigError(f"--format 的值无效: {format_opt}（期望 text/json）")
-        state.format = format_opt
-        state.format_explicit = True
-    elif (env_fmt := os.environ.get("EFC_FORMAT")) in ("text", "json"):
-        state.format = env_fmt
-    state.non_interactive = non_interactive or _env_flag("EFC_NON_INTERACTIVE")
-    state.stdin = stdin_opt
-    ctx.obj = state
-    if version:
-        print(f"efc {__version__}")
-        raise typer.Exit()
-
-
-@app.command()
-@_translate
-def repl(
-    ctx: typer.Context,
-    config: str = typer.Option(None, "--config", help="配置文件路径"),
-    verbose: bool = typer.Option(False, "-v", "--verbose", help="输出详细诊断信息"),
-) -> None:
-    """交互会话（text 模式专用；Agent 标志一律拒绝）。"""
-    state: AgentState = ctx.obj or AgentState()
-    if state.format == "json" or state.non_interactive or state.stdin:
-        raise ConfigError(
-            "repl 不支持 Agent 模式标志（--format json / --non-interactive / --stdin），"
-            "自动化请使用 scan / clean"
-        )
-    cfg = load_config(Path(config).expanduser() if config else None)
-    ReplSession(cfg, ConsoleUI()).run()
 
 
 def main() -> None:
