@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T005 已完成**，进度 5/27（5.5 / 37 人天 ≈ 14.9%）；下一任务 **T006**。
+> 当前状态：**T001-T006 已完成**，进度 6/27（6.5 / 37 人天 ≈ 17.6%）；下一任务 **T007**。
 
 ## 1. 里程碑
 
@@ -46,7 +46,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T003｜**工作量**：1.5 人天｜**产出**：`config.py` 新增 read_env_overrides/read_stdin_payload/merge_overrides
 - **验收**：`EFC_PATTERNS` 换行/分号分隔均可解析；`EFC_TASK="a\nb"` → `{"task":["a","b"]}`；`EFC_DRY_RUN=1` → `{"dry_run":True}`；stdin 未知键/类型不符 → ConfigError；TTY + `--stdin` → ConfigError；merge 优先级 CLI > stdin > env > config
 
-### T006 — 配置与输入测试
+### T006 — 配置与输入测试 ✅（2026-08-23）
 
 - **依赖**：T003、T004、T005｜**工作量**：1 人天｜**产出**：`tests/test_config.py`、`tests/test_input.py`
 - **验收**：两文件独立执行全绿；覆盖 Spec §14 对应行全部用例（≥20 断言场景）

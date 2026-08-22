@@ -166,7 +166,7 @@ def _from_dict(data: dict[str, Any]) -> AppConfig:
         )
     unknown = set(data) - _PERSISTENT_KEYS
     if unknown:
-        raise ConfigError(f"未知配置键: " + ", ".join(sorted(unknown)))
+        raise ConfigError("未知配置键: " + ", ".join(sorted(unknown)))
     cfg = AppConfig()
     if "tasks" in data:
         raw_tasks = data["tasks"]
