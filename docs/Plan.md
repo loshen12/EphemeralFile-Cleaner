@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T013 已完成**，进度 13/27（15.5 / 37 人天 ≈ 41.9%）；下一任务 **T014**。
+> 当前状态：**T001-T014 已完成**，进度 14/27（17.5 / 37 人天 ≈ 47.3%）；下一任务 **T015**。
 
 ## 1. 里程碑
 
@@ -86,7 +86,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T002、T007、T009、T010、T012｜**工作量**：3 人天｜**产出**：`src/efc/cleaner.py`
 - **验收**：Spec §7 十步全覆盖——高危+AutoUI→AbortError 零调用；备份失败未送 trash；trash 失败继续；confirm 拒绝 aborted；13 文件 max_batch=5 → 3 批（5/5/3）；批间拒绝停止；空间不足→AbortError 零调用；FileOutcome 携带 size/pattern、CleanOutcome 携带 task_name；scan 排除 backup_dir/log_file；dry_run 零 trash
 
-### T014 — 输出模块：总结 / 日志 / 响应
+### T014 — 输出模块：总结 / 日志 / 响应 ✅（2026-08-23）
 
 - **依赖**：T002｜**工作量**：2 人天｜**产出**：`src/efc/summary.py`、`journal.py`、`output.py`
 - **验收**：build_summary 同 dir 合并、None 归"(无模式)"、只计 trashed；render 含一、二、分节；ExecutionLog 追加单行 JSONL（tasks 含具体文件）、写失败仅警告；emit_success/emit_error 单行信封；exit_code_for 三分支
