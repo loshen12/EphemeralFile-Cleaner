@@ -11,19 +11,21 @@ import os
 import sys
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
+from send2trash import send2trash
 from typer._click.exceptions import (  # typer>=0.27 内置 click
     NoArgsIsHelpError,
     UsageError,
 )
 
 from efc import __version__
+from efc.cleaner import Cleaner
 from efc.config import (
     AppConfig,
     Task,
@@ -36,12 +38,14 @@ from efc.config import (
     resolve_task,
 )
 from efc.exceptions import ConfigError, EfcError
-from efc.models import ScanResult
+from efc.journal import ExecutionLog, build_record
+from efc.models import CleanOutcome, ScanResult
 from efc.output import emit_error, emit_success
 from efc.safety import ensure_supported_platform
 from efc.scanner import compile_patterns
 from efc.scanner import scan as scan_dir
-from efc.ui import ConsoleUI
+from efc.summary import build_summary, render_summary
+from efc.ui import UI, AutoUI, ConsoleUI
 
 app = typer.Typer(
     help="EphemeralFile Cleaner — 临时文件清理（回收站安全删除）",
@@ -265,6 +269,94 @@ def scan(
             stderr_ui.show_matches(result)  # text 表格走 stderr
     if fmt == "json":
         emit_success({"tasks": payloads})
+
+
+def _select_ui(state: AgentState, fmt: str, auto_yes: bool) -> UI:
+    """UI 选择：--yes → AutoUI；--non-interactive → 无交互 ConsoleUI（高危仍拒）。"""
+    if auto_yes:
+        return AutoUI()
+    if state.non_interactive:
+        return ConsoleUI(interactive=False, no_color=fmt == "json",
+                         progress=fmt != "json")
+    return ConsoleUI()
+
+
+def _aggregate_exit_code(outcomes: list[CleanOutcome]) -> int:
+    """多任务退出码：任一失败文件 → 4；否则任一中止 → 3；否则 0（PRD §5.3）。"""
+    if any(o.failed for o in outcomes):
+        return 4
+    if any(o.aborted for o in outcomes):
+        return 3
+    return 0
+
+
+@app.command()
+@_translate
+def clean(
+    ctx: typer.Context,
+    task: list[str] = typer.Option(None, "--task", help="按任务名选取（可重复）"),
+    all_tasks: bool = typer.Option(False, "--all-tasks", help="执行任务清单全部任务"),
+    dir_opt: str = typer.Option(None, "--dir", help="一次性目标目录（与 --task 互斥）"),
+    pattern: list[str] = typer.Option(None, "--pattern", help="文件名正则（可重复）"),
+    recursive: bool | None = typer.Option(
+        None, "--recursive/--no-recursive", help="三态覆盖任务递归设置"
+    ),
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+    yes: bool = typer.Option(False, "--yes", help="跳过普通确认（高危仍需确认）"),
+    no_backup: bool = typer.Option(False, "--no-backup", help="本次不备份（放弃恢复手段）"),
+    max_batch: int = typer.Option(None, "--max-batch", help="单批文件数上限（1..10）"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="预演：不删除不备份"),
+    no_log: bool = typer.Option(False, "--no-log", help="本次不写执行日志"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="输出详细诊断信息"),
+) -> None:
+    """清理：把命中文件移入回收站（删前备份，高危二次确认）。"""
+    state: AgentState = ctx.obj or AgentState()
+    fmt = _resolve_format()
+    cli_layer: dict[str, Any] = {}
+    if task:
+        cli_layer["task"] = list(task)
+    if all_tasks:
+        cli_layer["all_tasks"] = True
+    if dir_opt:
+        cli_layer["dir"] = dir_opt
+    if pattern:
+        cli_layer["patterns"] = list(pattern)
+    if recursive is not None:
+        cli_layer["recursive"] = recursive
+    if config:
+        cli_layer["config"] = config
+    if yes:
+        cli_layer["yes"] = True
+    if no_backup:
+        cli_layer["no_backup"] = True
+    if max_batch is not None:
+        cli_layer["max_batch"] = max_batch
+    if dry_run:
+        cli_layer["dry_run"] = True
+    if no_log:
+        cli_layer["no_log"] = True
+    cfg, eff = _gather(state, cli_layer)
+    is_dry_run = bool(eff.get("dry_run"))
+    if eff.get("no_backup"):
+        cfg.backup_enabled = False
+    targets = _resolve_targets(cfg, eff)
+    ui = _select_ui(state, fmt, auto_yes=bool(eff.get("yes")))
+    outcomes: list[CleanOutcome] = []
+    for rt in targets:
+        task_cfg = replace(cfg, target_dir=rt.dir, filename_patterns=rt.patterns,
+                           recursive=rt.recursive)
+        outcomes.append(
+            Cleaner(task_cfg, ui, send2trash, dry_run=is_dry_run,
+                    task_name=rt.name).run()
+        )
+    rendered = render_summary(build_summary(outcomes))
+    if fmt == "text" and rendered:
+        typer.echo(rendered)
+    if cfg.log_enabled and not eff.get("no_log"):
+        ExecutionLog(cfg.log_file).record(build_record("clean", outcomes, is_dry_run))
+    code = _aggregate_exit_code(outcomes)
+    if code:
+        raise typer.Exit(code=code)
 
 
 @app.callback()
