@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T024 已完成**，进度 24/27（32.5 / 37 人天 ≈ 87.8%）；下一任务 **T025**。
+> 当前状态：**T001-T025 已完成**，进度 25/27（34.5 / 37 人天 ≈ 93.2%）；下一任务 **T026**。
 
 ## 1. 里程碑
 
@@ -141,7 +141,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T021、T022、T023｜**工作量**：1.5 人天｜**产出**：`tests/test_cli.py`（TestTask/TestPatterns/TestAgent/TestMultiTask）
 - **验收**：`pytest tests/test_cli.py` 全绿；不依赖真实 send2trash
 
-### T025 — REPL 完整实现（含 task 命令）
+### T025 — REPL 完整实现（含 task 命令） ✅（2026-08-23）
 
 - **依赖**：T002、T003、T007、T013、T014｜**工作量**：2 人天｜**产出**：`src/efc/repl.py`
 - **验收**：Spec §10 命令表全实现——task 列/加载；dir 高危即时警告；pattern 非法拒绝；list 预览；clean 走同一流水线并写日志输出总结；exit/quit/EOF 退出；未知命令不退出；默认清单恰一个任务时自动加载
