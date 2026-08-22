@@ -41,7 +41,7 @@ from efc.config import (
     save_config,
 )
 from efc.exceptions import ConfigError, EfcError
-from efc.journal import ExecutionLog, build_record
+from efc.journal import ExecutionLog, build_record, judge_result
 from efc.models import CleanOutcome, ScanResult
 from efc.output import emit_error, emit_success
 from efc.repl import ReplSession
@@ -483,12 +483,17 @@ def scan(
 
 
 def _select_ui(state: AgentState, fmt: str, auto_yes: bool) -> UI:
-    """UI 选择：--yes → AutoUI；--non-interactive → 无交互 ConsoleUI（高危仍拒）。"""
+    """UI 选择：--yes → AutoUI；--non-interactive → 无交互 ConsoleUI（高危仍拒）。
+
+    json 模式人读输出（表格/总结）一律走 stderr，stdout 只留信封。
+    """
+    stderr_console = Console(file=sys.stderr, no_color=True)
     if auto_yes:
         return AutoUI()
     if state.non_interactive:
-        return ConsoleUI(interactive=False, no_color=fmt == "json",
-                         progress=fmt != "json")
+        return ConsoleUI(interactive=False, no_color=True, progress=False)
+    if fmt == "json":
+        return ConsoleUI(console=stderr_console, no_color=True, progress=False)
     return ConsoleUI()
 
 
@@ -550,6 +555,8 @@ def clean(
     is_dry_run = bool(eff.get("dry_run"))
     if eff.get("no_backup"):
         cfg.backup_enabled = False
+    if fmt == "json" and not (eff.get("yes") or state.non_interactive):
+        raise ConfigError("json 模式需要 --yes 或 --non-interactive 之一明确确认策略")
     targets = _resolve_targets(cfg, eff)
     ui = _select_ui(state, fmt, auto_yes=bool(eff.get("yes")))
     outcomes: list[CleanOutcome] = []
@@ -560,14 +567,64 @@ def clean(
             Cleaner(task_cfg, ui, send2trash, dry_run=is_dry_run,
                     task_name=rt.name).run()
         )
-    rendered = render_summary(build_summary(outcomes))
-    if fmt == "text" and rendered:
-        typer.echo(rendered)
-    if cfg.log_enabled and not eff.get("no_log"):
-        ExecutionLog(cfg.log_file).record(build_record("clean", outcomes, is_dry_run))
+    log_written = cfg.log_enabled and not eff.get("no_log")
     code = _aggregate_exit_code(outcomes)
+    rendered = render_summary(build_summary(outcomes))
+    if fmt == "json":
+        emit_success(_clean_payload(cfg, targets, outcomes, is_dry_run, code,
+                                    log_written))
+    elif rendered:
+        typer.echo(rendered)
+    if log_written:
+        ExecutionLog(cfg.log_file).record(build_record("clean", outcomes, is_dry_run))
     if code:
         raise typer.Exit(code=code)
+
+
+def _clean_payload(cfg: AppConfig, targets: list[RuntimeTask],
+                   outcomes: list[CleanOutcome], is_dry_run: bool, code: int,
+                   log_written: bool) -> dict[str, Any]:
+    """clean 的 json 信封 data（Spec §6.3）。"""
+    tasks: list[dict[str, Any]] = []
+    for rt, outcome in zip(targets, outcomes, strict=True):
+        trashed = outcome.trashed
+        by_pattern: list[dict[str, Any]] = []
+        for fo in trashed:
+            key = fo.pattern if fo.pattern is not None else "(无模式)"
+            entry = next((p for p in by_pattern if p["pattern"] == key), None)
+            if entry is None:
+                entry = {"pattern": key, "files": 0, "bytes": 0}
+                by_pattern.append(entry)
+            entry["files"] += 1
+            entry["bytes"] += fo.size
+        tasks.append({
+            "name": rt.name,
+            "dir": str(outcome.target_dir),
+            "trashed": len(trashed),
+            "bytes": sum(f.size for f in trashed),
+            "by_pattern": by_pattern,
+            "files": [
+                {"path": str(f.path), "size": f.size, "pattern": f.pattern,
+                 "status": f.status}
+                for f in outcome.results
+            ],
+        })
+    backup_dir = next((str(o.backup_dir) for o in outcomes
+                       if o.backup_dir is not None), None)
+    return {
+        "command": "clean",
+        "result": judge_result(outcomes, is_dry_run),
+        "exit_code": code,
+        "duration_seconds": sum(o.duration_seconds for o in outcomes),
+        "total_matched": sum(o.total_matched for o in outcomes),
+        "trashed": sum(len(o.trashed) for o in outcomes),
+        "failed": sum(len(o.failed) for o in outcomes),
+        "aborted": any(o.aborted for o in outcomes),
+        "backup_dir": backup_dir,
+        "log_file": str(cfg.log_file) if log_written else None,
+        "summary": render_summary(build_summary(outcomes)),
+        "tasks": tasks,
+    }
 
 
 

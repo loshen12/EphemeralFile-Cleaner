@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T021 已完成**，进度 21/27（27 / 37 人天 ≈ 73.0%）；下一任务 **T022**。
+> 当前状态：**T001-T022 已完成**，进度 22/27（29.5 / 37 人天 ≈ 79.7%）；下一任务 **T023**。
 
 ## 1. 里程碑
 
@@ -126,7 +126,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T004、T005、T016｜**工作量**：2 人天｜**产出**：`cli.py` task 子命令组 + patterns 命令
 - **验收**：`task add --name/--dir/--pattern.../--default` 写盘；同名更新去重/`--replace-patterns` 替换；`task list` 显示 default 标记与设置；`task remove` 生效；`patterns` 全部/`--task`/空清单 exit 0/`--json` 信封；坏正则/目录不存在 → exit 2 不写盘
 
-### T022 — 多任务 clean 与 Agent JSON 双输出
+### T022 — 多任务 clean 与 Agent JSON 双输出 ✅（2026-08-23）
 
 - **依赖**：T017、T018、T021、T014｜**工作量**：2.5 人天｜**产出**：`cli.py` clean 多任务扩展 + 全命令 JSON 集成
 - **验收**：`--task A --task B` 顺序执行、聚合总结分节；`--all-tasks` 全部；无参数走默认清单（空 → exit 2）；`--dir` 与 `--task`/`--all-tasks` 互斥 exit 2；任一失败→4、任一 abort→3、否则 0；日志仅一条含全部任务；json 信封各命令结构符合 Spec §6.3
