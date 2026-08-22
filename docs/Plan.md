@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001 已完成**，进度 1/27（0.5 / 37 人天 ≈ 1.4%）；下一任务 **T002**。
+> 当前状态：**T001-T002 已完成**，进度 2/27（1 / 37 人天 ≈ 2.7%）；下一任务 **T003**。
 
 ## 1. 里程碑
 
@@ -26,7 +26,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：无｜**工作量**：0.5 人天｜**产出**：`pyproject.toml`、`src/efc/__init__.py`、目录骨架
 - **验收**：`pip install -e ".[dev]"` 无报错；`efc --help` 可运行；`mypy src/` 零错误（已于 2026-08-22 在 macOS+uv 环境复核通过）
 
-### T002 — 异常类与数据模型
+### T002 — 异常类与数据模型 ✅（2026-08-22）
 
 - **依赖**：无｜**工作量**：0.5 人天｜**产出**：`src/efc/exceptions.py`、`src/efc/models.py`
 - **验收**：dataclass 字段与 Spec §3 完全一致；`AbortError.exit_code == 3`；`CleanOutcome.trashed/failed` 语义正确；`task_name` 为 `str | None`
