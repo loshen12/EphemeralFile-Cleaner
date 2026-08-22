@@ -314,3 +314,274 @@ class TestMainEnvelope:
         assert code == 0
         assert "Usage" in captured.out + captured.err
         assert "data" not in captured.out
+
+
+class TtyStream:
+    def isatty(self) -> bool:
+        return True
+
+
+class TestTask:
+    def test_add_writes_config(self, tmp_path):
+        d = tmp_path / "d"
+        d.mkdir()
+        result = runner.invoke(app, ["task", "add", "--name", "t",
+                                     "--dir", str(d), "--pattern", r"\.tmp$",
+                                     "--default"])
+        assert result.exit_code == 0
+        data = json.loads(Path("config.json").read_text(encoding="utf-8"))
+        assert data["tasks"][0]["name"] == "t"
+        assert data["tasks"][0]["default"] is True
+
+    def test_add_update_dedup_and_replace(self, tmp_path):
+        d = tmp_path / "d"
+        d.mkdir()
+        runner.invoke(app, ["task", "add", "--name", "t", "--dir", str(d),
+                            "--pattern", r"\.tmp$"])
+        runner.invoke(app, ["task", "add", "--name", "t",
+                            "--pattern", r"\.tmp$", "--pattern", r"\.bak$"])
+        r = runner.invoke(app, ["--format", "json", "task", "list"])
+        tasks = json.loads(r.stdout)["data"]["tasks"]
+        assert tasks[0]["patterns"] == [r"\.tmp$", r"\.bak$"]  # 追加去重
+        runner.invoke(app, ["task", "add", "--name", "t",
+                            "--pattern", r"^x", "--replace-patterns"])
+        r = runner.invoke(app, ["--format", "json", "task", "list"])
+        assert json.loads(r.stdout)["data"]["tasks"][0]["patterns"] == [r"^x"]
+
+    def test_add_validation_failure_keeps_config(self, tmp_path):
+        d = tmp_path / "d"
+        d.mkdir()
+        runner.invoke(app, ["task", "add", "--name", "t", "--dir", str(d),
+                            "--pattern", r"\.tmp$"])
+        before = Path("config.json").read_text(encoding="utf-8")
+        r1 = runner.invoke(app, ["task", "add", "--name", "bad",
+                                 "--dir", str(tmp_path / "nope")])
+        r2 = runner.invoke(app, ["task", "add", "--name", "bad2", "--dir", str(d),
+                                 "--pattern", "("])
+        assert r1.exit_code == r2.exit_code == 2
+        assert Path("config.json").read_text(encoding="utf-8") == before  # 不写盘
+
+    def test_list_shows_default_marker(self, tmp_path):
+        d1, d2 = tmp_path / "a", tmp_path / "b"
+        d1.mkdir()
+        d2.mkdir()
+        runner.invoke(app, ["task", "add", "--name", "one", "--dir", str(d1),
+                            "--pattern", "a", "--default"])
+        runner.invoke(app, ["task", "add", "--name", "two", "--dir", str(d2),
+                            "--pattern", "b"])
+        result = runner.invoke(app, ["task", "list"])
+        assert result.exit_code == 0
+        assert "one [默认]" in result.stdout and "two:" in result.stdout
+
+    def test_list_json_envelope_full_config(self, tmp_path):
+        result = runner.invoke(app, ["task", "list", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)["data"]
+        assert set(data) == {"tasks", "confirm", "max_batch", "backup_enabled",
+                             "backup_dir", "ignore_case", "log_enabled",
+                             "log_file", "high_risk_dirs"}
+        assert data["max_batch"] == 5
+
+    def test_remove_by_name_and_missing(self, tmp_path):
+        d = tmp_path / "d"
+        d.mkdir()
+        runner.invoke(app, ["task", "add", "--name", "t", "--dir", str(d),
+                            "--pattern", "p"])
+        r = runner.invoke(app, ["--format", "json", "task", "remove", "--name", "t"])
+        assert r.exit_code == 0 and json.loads(r.stdout)["data"]["removed"] is True
+        r = runner.invoke(app, ["--format", "json", "task", "remove", "--name", "t"])
+        assert json.loads(r.stdout)["data"]["removed"] is False
+        assert json.loads(Path("config.json").read_text(encoding="utf-8"))["tasks"] == []
+
+    def test_remove_requires_exactly_one(self):
+        result = runner.invoke(app, ["task", "remove"])
+        assert result.exit_code == 2
+
+
+class TestPatterns:
+    def test_patterns_all_and_single(self, tmp_path):
+        d1, d2 = tmp_path / "a", tmp_path / "b"
+        d1.mkdir()
+        d2.mkdir()
+        runner.invoke(app, ["task", "add", "--name", "one", "--dir", str(d1),
+                            "--pattern", "p1"])
+        runner.invoke(app, ["task", "add", "--name", "two", "--dir", str(d2),
+                            "--pattern", "p2"])
+        r_all = runner.invoke(app, ["patterns"])
+        assert "one" in r_all.stdout and "two" in r_all.stdout
+        r_one = runner.invoke(app, ["--format", "json", "patterns", "--task", "one"])
+        tasks = json.loads(r_one.stdout)["data"]["tasks"]
+        assert [t["task"] for t in tasks] == ["one"]
+        assert tasks[0]["patterns"] == ["p1"]
+
+    def test_patterns_unknown_task_exit_2(self):
+        result = runner.invoke(app, ["patterns", "--task", "nope"])
+        assert result.exit_code == 2
+
+    def test_patterns_empty_list_exit_0(self):
+        result = runner.invoke(app, ["patterns"])
+        assert result.exit_code == 0
+        assert "任务清单为空" in result.stdout
+        r = runner.invoke(app, ["--format", "json", "patterns"])
+        assert json.loads(r.stdout)["data"]["tasks"] == []
+
+
+class TestAgent:
+    def test_clean_json_envelope_structure(self, tmp_path, cli_trash):
+        target = tmp_path / "d"
+        target.mkdir()
+        (target / "a.tmp").write_text("xx")
+        result = runner.invoke(app, ["--format", "json", "clean", "--dir",
+                                     str(target), "--pattern", r"\.tmp$",
+                                     "--yes", "--no-log"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)["data"]
+        assert set(data) >= {"command", "result", "exit_code", "duration_seconds",
+                             "total_matched", "trashed", "failed", "aborted",
+                             "backup_dir", "log_file", "summary", "tasks"}
+        assert data["command"] == "clean" and data["result"] == "completed"
+        assert data["trashed"] == 1 and data["tasks"][0]["files"][0]["status"] == "trashed"
+        assert data["tasks"][0]["by_pattern"] == [
+            {"pattern": r"\.tmp$", "files": 1, "bytes": 2}]
+
+    def test_stdin_payload_drives_clean(self, tmp_path, cli_trash):
+        target = tmp_path / "d"
+        target.mkdir()
+        (target / "a.tmp").write_text("x")
+        payload = json.dumps({"dir": str(target), "patterns": [r"\.tmp$"],
+                              "dry_run": True})
+        result = runner.invoke(app, ["--format", "json", "--non-interactive",
+                                     "--stdin", "clean"], input=payload)
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)["data"]
+        assert data["result"] == "dry_run" and cli_trash.calls == []
+
+    def test_stdin_command_mismatch_exit_2(self, tmp_path):
+        payload = json.dumps({"command": "scan", "dir": str(tmp_path),
+                              "patterns": [r"\.tmp$"]})
+        result = runner.invoke(app, ["--format", "json", "--non-interactive",
+                                     "--stdin", "clean"], input=payload)
+        assert result.exit_code == 2
+
+    def test_stdin_tty_rejected(self, monkeypatch, capsys):
+        # CliRunner 会替换 sys.stdin，TTY 场景经真实入口 main() 直驱
+        monkeypatch.setattr(sys, "stdin", TtyStream())
+        code = run_main(monkeypatch, ["--stdin", "scan", "--dir", ".",
+                                      "--pattern", "x"])
+        captured = capsys.readouterr()
+        assert code == 2
+        assert "TTY" in captured.err or "管道" in captured.err
+
+    def test_non_interactive_high_risk_exit_3(self, tmp_path, cli_trash):
+        target = tmp_path / "guard"
+        target.mkdir()
+        (target / "a.tmp").write_text("x")
+        write_config({
+            "tasks": [{"name": "g", "dir": str(target), "patterns": [r"\.tmp$"]}],
+            "high_risk_dirs": [str(target)],
+        })
+        result = runner.invoke(app, ["--non-interactive", "clean", "--task", "g"])
+        assert result.exit_code == 3
+        assert cli_trash.calls == []
+
+    def test_json_requires_confirm_strategy(self, tmp_path):
+        result = runner.invoke(app, ["--format", "json", "clean", "--dir",
+                                     str(tmp_path), "--pattern", r"\.tmp$"])
+        assert result.exit_code == 2
+        assert "--yes" in result.stderr
+
+    def test_env_priority_applies(self, tmp_path, cli_trash):
+        target = tmp_path / "d"
+        target.mkdir()
+        (target / "a.tmp").write_text("x")
+        (target / "b.tmp").write_text("x")
+        import os as _os
+        _os.environ["EFC_MAX_BATCH"] = "1"
+        try:
+            result = runner.invoke(app, ["clean", "--dir", str(target),
+                                         "--pattern", r"\.tmp$", "--yes"])
+            assert result.exit_code == 0
+        finally:
+            _os.environ.pop("EFC_MAX_BATCH", None)
+        # 批大小 1：两文件两批（fake UI 自动确认批次）
+
+
+class TestMultiTask:
+    def test_task_flag_order_preserved(self, tmp_path, cli_trash):
+        a, b = tmp_path / "a", tmp_path / "b"
+        a.mkdir()
+        b.mkdir()
+        (a / "x.tmp").write_text("x")
+        (b / "y.tmp").write_text("x")
+        write_config({"tasks": [
+            {"name": "A", "dir": str(a), "patterns": [r"\.tmp$"]},
+            {"name": "B", "dir": str(b), "patterns": [r"\.tmp$"]},
+        ]})
+        result = runner.invoke(app, ["clean", "--task", "B", "--task", "A",
+                                     "--yes", "--no-log"])
+        assert result.exit_code == 0
+        assert cli_trash.calls == [str(b / "y.tmp"), str(a / "x.tmp")]  # CLI 顺序
+
+    def test_all_tasks_runs_everything(self, tmp_path, cli_trash):
+        a, b = tmp_path / "a", tmp_path / "b"
+        a.mkdir()
+        b.mkdir()
+        (a / "x.tmp").write_text("x")
+        (b / "y.tmp").write_text("x")
+        write_config({"tasks": [
+            {"name": "A", "dir": str(a), "patterns": [r"\.tmp$"]},
+            {"name": "B", "dir": str(b), "patterns": [r"\.tmp$"]},
+        ]})
+        result = runner.invoke(app, ["clean", "--all-tasks", "--yes"])
+        assert result.exit_code == 0
+        assert len(cli_trash.calls) == 2
+        assert "等 2 条路径" in norm(result.stdout)
+
+    def test_single_journal_record_for_all_tasks(self, tmp_path, cli_trash):
+        a, b = tmp_path / "a", tmp_path / "b"
+        a.mkdir()
+        b.mkdir()
+        (a / "x.tmp").write_text("x")
+        (b / "y.tmp").write_text("x")
+        write_config({"tasks": [
+            {"name": "A", "dir": str(a), "patterns": [r"\.tmp$"]},
+            {"name": "B", "dir": str(b), "patterns": [r"\.tmp$"]},
+        ]})
+        runner.invoke(app, ["clean", "--all-tasks", "--yes"])
+        lines = Path(".efc.log").read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1  # 仅一条
+        rec = json.loads(lines[0])
+        assert [t["name"] for t in rec["tasks"]] == ["A", "B"]  # 含全部任务
+
+    @pytest.mark.parametrize("extra", [["--task", "A"], ["--all-tasks"]])
+    def test_dir_mutually_exclusive_with_all(self, tmp_path, extra):
+        a = tmp_path / "a"
+        a.mkdir()
+        write_config({"tasks": [
+            {"name": "A", "dir": str(a), "patterns": [r"\.tmp$"]},
+        ]})
+        result = runner.invoke(app, ["clean", "--dir", str(a), *extra,
+                                     "--pattern", r"\.tmp$", "--yes"])
+        assert result.exit_code == 2
+
+    def test_any_failure_exit_4(self, tmp_path, cli_trash):
+        target = tmp_path / "d"
+        target.mkdir()
+        (target / "a.tmp").write_text("x")
+        (target / "b.tmp").write_text("x")
+        cli_trash.fail_names = {"b.tmp"}
+        result = runner.invoke(app, ["clean", "--dir", str(target),
+                                     "--pattern", r"\.tmp$", "--yes", "--no-log"])
+        assert result.exit_code == 4
+        assert len(cli_trash.calls) == 1
+
+    def test_batch_refusal_aborts_exit_3(self, tmp_path, cli_trash):
+        target = tmp_path / "d"
+        target.mkdir()
+        for i in range(7):
+            (target / f"f{i}.tmp").write_text("x")
+        result = runner.invoke(app, ["clean", "--dir", str(target),
+                                     "--pattern", r"\.tmp$", "--max-batch", "3"],
+                               input="y\nn\n")  # 首确认 y，批间 n
+        assert result.exit_code == 3
+        assert len(cli_trash.calls) == 3  # 第一批后停止
