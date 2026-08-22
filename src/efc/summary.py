@@ -111,7 +111,7 @@ def render_summary(s: RunSummary) -> str:
     ]
     for i, t in enumerate(s.tasks, 1):
         label = _NUMERALS[i - 1] if i <= len(_NUMERALS) else str(i)
-        name_part = f"（{t.name}）" if t.name else ""
+        name_part = f"（{t.name}）" if t.name else " "
         lines.append(
             f"{label}、本次 {t.dir}{name_part}完成清理 {t.files} 个文件，"
             f"合计大小 {format_bytes(t.bytes)}，具体为："

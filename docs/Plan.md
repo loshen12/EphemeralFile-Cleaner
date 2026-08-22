@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T014 已完成**，进度 14/27（17.5 / 37 人天 ≈ 47.3%）；下一任务 **T015**。
+> 当前状态：**T001-T015 已完成**，进度 15/27（19.5 / 37 人天 ≈ 52.7%）；下一任务 **T016**。
 
 ## 1. 里程碑
 
@@ -91,7 +91,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T002｜**工作量**：2 人天｜**产出**：`src/efc/summary.py`、`journal.py`、`output.py`
 - **验收**：build_summary 同 dir 合并、None 归"(无模式)"、只计 trashed；render 含一、二、分节；ExecutionLog 追加单行 JSONL（tasks 含具体文件）、写失败仅警告；emit_success/emit_error 单行信封；exit_code_for 三分支
 
-### T015 — 流水线及输出测试
+### T015 — 流水线及输出测试 ✅（2026-08-23）
 
 - **依赖**：T013、T014｜**工作量**：2 人天｜**产出**：`tests/test_cleaner.py`、`test_summary.py`、`test_journal.py`、`test_output.py`
 - **验收**：四文件独立执行全绿；覆盖 Spec §14 对应行（合计 ≥30 断言场景）
