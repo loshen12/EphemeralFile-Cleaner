@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T016 已完成**，进度 16/27（21 / 37 人天 ≈ 56.8%）；下一任务 **T017**。
+> 当前状态：**T001-T017 已完成**，进度 17/27（22 / 37 人天 ≈ 59.5%）；下一任务 **T018**。
 
 ## 1. 里程碑
 
@@ -101,7 +101,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T002、T014｜**工作量**：1.5 人天｜**产出**：`cli.py` 骨架（app/callback/AgentState/_resolve_format/main/repl 入口）
 - **验收**：`--format json --help` 输出人类文本；`--non-interactive --stdin repl` → exit 2；UsageError json → `{"code":2}` + exit 2；未知异常 → code 1；不支持平台 → exit 2；`_resolve_format` 不依赖 callback
 
-### T017 — scan 命令（任务解析 + tasks 数组输出）
+### T017 — scan 命令（任务解析 + tasks 数组输出） ✅（2026-08-23）
 
 - **依赖**：T003、T004、T005、T007、T016｜**工作量**：1 人天｜**产出**：`cli.py` scan 命令
 - **验收**：text 表格（stderr）；json 单行信封 tasks 数组（一次性 task=null）；`--task` 选取清单任务；无任务来源且默认清单空 → exit 2 提示；`--dir`+`--task` 互斥 exit 2

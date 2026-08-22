@@ -12,18 +12,36 @@ import sys
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import typer
+from rich.console import Console
 from typer._click.exceptions import (  # typer>=0.27 内置 click
     NoArgsIsHelpError,
     UsageError,
 )
 
 from efc import __version__
+from efc.config import (
+    AppConfig,
+    Task,
+    default_tasks,
+    list_tasks,
+    load_config,
+    merge_overrides,
+    read_env_overrides,
+    read_stdin_payload,
+    resolve_task,
+)
 from efc.exceptions import ConfigError, EfcError
-from efc.output import emit_error
+from efc.models import ScanResult
+from efc.output import emit_error, emit_success
 from efc.safety import ensure_supported_platform
+from efc.scanner import compile_patterns
+from efc.scanner import scan as scan_dir
+from efc.ui import ConsoleUI
 
 app = typer.Typer(
     help="EphemeralFile Cleaner — 临时文件清理（回收站安全删除）",
@@ -91,6 +109,162 @@ def _resolve_format() -> str:
 
 def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true")
+
+
+# ---------- 输入合并与任务解析（scan/clean/repl 共用，Spec §4.3/§4.4）----------
+
+
+@dataclass
+class RuntimeTask:
+    """已应用 CLI/stdin/env 覆盖的每任务运行时参数；一次性任务 name=None。"""
+
+    name: str | None
+    dir: Path
+    patterns: list[str]
+    recursive: bool
+
+
+def _effective(*layers: dict[str, Any]) -> dict[str, Any]:
+    """按层序合并非 None 键（后层优先）——CLI > stdin > env。"""
+    eff: dict[str, Any] = {}
+    for layer in layers:
+        for key, value in layer.items():
+            if value is not None:
+                eff[key] = value
+    return eff
+
+
+def _gather(state: AgentState,
+             cli_layer: dict[str, Any]) -> tuple[AppConfig, dict[str, Any]]:
+    """读 env/stdin/CLI 三层 → (合并后的 AppConfig, 有效参数层)。
+
+    config 键同样按 CLI > stdin > env 决定配置文件路径。
+    """
+    env_layer = read_env_overrides()
+    stdin_layer: dict[str, Any] = {}
+    if state.stdin:
+        payload = read_stdin_payload()
+        payload.pop("command", None)  # command 缺省取 CLI 子命令，不参与合并
+        stdin_layer = payload
+    eff = _effective(env_layer, stdin_layer, cli_layer)
+    config_path = eff.get("config")
+    cfg = load_config(Path(str(config_path)) if config_path else None)
+    cfg = merge_overrides(cfg, env_layer, stdin_layer, cli_layer)
+    return cfg, eff
+
+
+def _resolve_targets(cfg: AppConfig, eff: dict[str, Any]) -> list[RuntimeTask]:
+    """任务解析规则：--task > --all-tasks > --dir（一次性）> 默认清单。
+
+    patterns 覆盖对每任务整体替换；recursive 三态覆盖；--dir 与
+    --task/--all-tasks 互斥。
+    """
+    if eff.get("dir") and (eff.get("task") or eff.get("all_tasks")):
+        raise ConfigError("--dir 不能与 --task/--all-tasks 同时使用")
+    patterns_override = eff.get("patterns")
+    recursive_override = eff.get("recursive")
+
+    def finalize(t: Task) -> RuntimeTask:
+        if t.dir is None:
+            raise ConfigError(f"任务 {t.name} 缺少 dir")
+        return RuntimeTask(
+            name=t.name,
+            dir=t.dir,
+            patterns=list(patterns_override) if patterns_override is not None
+            else list(t.patterns),
+            recursive=bool(recursive_override) if recursive_override is not None
+            else t.recursive,
+        )
+
+    out: list[RuntimeTask] = []
+    if names := eff.get("task"):
+        out = [finalize(resolve_task(cfg, name)) for name in names]
+    elif eff.get("all_tasks"):
+        all_tasks = list_tasks(cfg)
+        if not all_tasks:
+            raise ConfigError("任务清单为空，--all-tasks 无可执行任务")
+        out = [finalize(t) for t in all_tasks]
+    elif eff.get("dir"):
+        patterns = patterns_override if patterns_override is not None else []
+        if not patterns:
+            raise ConfigError("一次性任务需要同时提供 --pattern（可重复）")
+        target = cfg.target_dir if cfg.target_dir is not None else Path(str(eff["dir"]))
+        out = [RuntimeTask(name=None, dir=target, patterns=list(patterns),
+                           recursive=bool(recursive_override))]
+    else:
+        defaults = default_tasks(cfg)
+        if not defaults:
+            raise ConfigError(
+                "没有可执行的任务：请用 efc task add --default 建立默认任务，"
+                "或指定 --task / --dir + --pattern"
+            )
+        out = [finalize(t) for t in defaults]
+    return out
+
+
+def _scan_target(cfg: AppConfig, rt: RuntimeTask) -> ScanResult:
+    compiled = compile_patterns(rt.patterns, cfg.ignore_case)
+    return scan_dir(rt.dir, compiled, rt.recursive)
+
+
+def _scan_payload(result: ScanResult, rt: RuntimeTask) -> dict[str, Any]:
+    return {
+        "task": rt.name,
+        "root": str(result.root),
+        "recursive": result.recursive,
+        "scanned_dirs": result.scanned_dirs,
+        "count": len(result.matches),
+        "matches": [
+            {
+                "path": str(m.path),
+                "relative": m.relative,
+                "size": m.size,
+                "mtime": datetime.fromtimestamp(m.mtime).isoformat(),
+            }
+            for m in result.matches
+        ],
+    }
+
+
+@app.command()
+@_translate
+def scan(
+    ctx: typer.Context,
+    task: list[str] = typer.Option(None, "--task", help="按任务名选取（可重复）"),
+    dir_opt: str = typer.Option(None, "--dir", help="一次性目标目录（与 --task 互斥）"),
+    pattern: list[str] = typer.Option(None, "--pattern", help="文件名正则（可重复）"),
+    recursive: bool | None = typer.Option(
+        None, "--recursive/--no-recursive", help="三态覆盖任务递归设置"
+    ),
+    config: str = typer.Option(None, "--config", help="配置文件路径"),
+    json_flag: bool = typer.Option(False, "--json", help="--format json 简写"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="输出详细诊断信息"),
+) -> None:
+    """扫描预览：列出各任务命中文件（只读，不删除）。"""
+    state: AgentState = ctx.obj or AgentState()
+    fmt = _resolve_format()
+    cli_layer: dict[str, Any] = {}
+    if task:
+        cli_layer["task"] = list(task)
+    if dir_opt:
+        cli_layer["dir"] = dir_opt
+    if pattern:
+        cli_layer["patterns"] = list(pattern)
+    if recursive is not None:
+        cli_layer["recursive"] = recursive
+    if config:
+        cli_layer["config"] = config
+    cfg, eff = _gather(state, cli_layer)
+    targets = _resolve_targets(cfg, eff)
+    payloads = []
+    stderr_ui = ConsoleUI(console=Console(file=sys.stderr, no_color=False))
+    for rt in targets:
+        result = _scan_target(cfg, rt)
+        payloads.append(_scan_payload(result, rt))
+        if fmt == "text":
+            stderr_ui.show_matches(result)  # text 表格走 stderr
+    if fmt == "json":
+        emit_success({"tasks": payloads})
 
 
 @app.callback()
