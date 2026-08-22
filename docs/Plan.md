@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T002 已完成**，进度 2/27（1 / 37 人天 ≈ 2.7%）；下一任务 **T003**。
+> 当前状态：**T001-T003 已完成**，进度 3/27（2.5 / 37 人天 ≈ 6.8%）；下一任务 **T004**。
 
 ## 1. 里程碑
 
@@ -31,7 +31,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：无｜**工作量**：0.5 人天｜**产出**：`src/efc/exceptions.py`、`src/efc/models.py`
 - **验收**：dataclass 字段与 Spec §3 完全一致；`AbortError.exit_code == 3`；`CleanOutcome.trashed/failed` 语义正确；`task_name` 为 `str | None`
 
-### T003 — 配置核心：Task 模型 / 加载 / 合并 / 校验 / 保存
+### T003 — 配置核心：Task 模型 / 加载 / 合并 / 校验 / 保存 ✅（2026-08-23）
 
 - **依赖**：T002｜**工作量**：1.5 人天｜**产出**：`config.py`（AppConfig/Task/load_config/merged/save_config/validate）
 - **验收**：合法 JSON → 正确 AppConfig（含 tasks 与 `~` 展开）；`max_batch=11` → ConfigError；缺配置文件 → 默认值不报错；指定路径不存在 → ConfigError；save 原子写且只含持久化字段；任务名重复、v1.0 旧顶层键 → ConfigError
