@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T008 已完成**，进度 8/27（8 / 37 人天 ≈ 21.6%）；下一任务 **T009**。
+> 当前状态：**T001-T009 已完成**，进度 9/27（9.5 / 37 人天 ≈ 25.7%）；下一任务 **T010**。
 
 ## 1. 里程碑
 
@@ -61,7 +61,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T007｜**工作量**：0.5 人天｜**产出**：`tests/test_scanner.py`
 - **验收**：独立执行全绿；覆盖 Spec §14 对应行（≥10 断言场景）
 
-### T009 — 平台与安全守卫（三平台）
+### T009 — 平台与安全守卫（三平台） ✅（2026-08-23）
 
 - **依赖**：T002｜**工作量**：1.5 人天｜**产出**：`src/efc/safety.py`
 - **验收**：参数化 `sys.platform`：win32/darwin/linux 通过、aix → PlatformError；`is_unc` win True / posix False；`assess_risk` 覆盖 Spec §8 全矩阵（win+posix 保护根及后代、卷根 `C:\` 与 `/`、recursive 祖先、home 根高危但子目录不高危）；`validate_batch_size(11)` → ConfigError

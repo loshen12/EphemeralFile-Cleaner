@@ -383,7 +383,7 @@ target 需已 `resolve()`；满足任一即 high_risk（reason 给人话原因�
 
 - a) target 是卷根/盘符根：`volume_root(target) == target`（win `C:\`；posix `/` 与各挂载点）；
 - b) target 等于某系统保护根或 home 根（normcase 比对）；
-- c) target 位于某**系统**保护根之内（后代）；home 根不参与本条（用户目录是常规清理对象，home 子目录不自动高危）；
+- c) target 位于某**系统**保护根之内（后代）；home 根不参与本条（用户目录是常规清理对象，home 子目录不自动高危）——home 子树内的目标亦不因作为 home 祖先的系统保护根（如 linux 的 `/`、`/home`）触发本条；
 - d) recursive=True 且 target 是某系统保护根的祖先（如 `/` 之于 `/usr`、`C:\` 之于 `C:\Windows`）。
 
 平台保护根（展开环境变量并 resolve，取不到跳过，加 extra）：
