@@ -1,4 +1,5 @@
-"""配置系统（Spec §4）：AppConfig/Task 数据模型、加载/合并/校验/保存、任务清单增删查。
+"""配置系统（Spec §4）：AppConfig/Task 数据模型、加载/合并/校验/保存、任务清单增删查、
+Agent 输入（环境变量 EFC_* 与 --stdin JSON 负载）解析。
 
 任务清单 tasks[] 是任务唯一持久化形式；v1.0 顶层默认目标字段
 （target_dir/filename_patterns/recursive）出现在 config.json 即 ConfigError。
@@ -7,6 +8,7 @@
 import json
 import os
 import re
+import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -427,3 +429,125 @@ def resolve_task(cfg: AppConfig, name: str) -> Task:
 def default_tasks(cfg: AppConfig) -> list[Task]:
     """default=True 的任务，按配置顺序。"""
     return [t for t in cfg.tasks if t.default]
+
+
+# ---------- Agent 输入：环境变量与 --stdin ----------
+
+# --stdin 负载 Schema（Spec §4.4）；传输级标志只来自 CLI 与环境变量，不在此列
+_STDIN_SCHEMA: dict[str, type[Any]] = {
+    "command": str,
+    "config": str,
+    "task": list,
+    "all_tasks": bool,
+    "dir": str,
+    "patterns": list,
+    "recursive": bool,
+    "yes": bool,
+    "max_batch": int,
+    "backup_enabled": bool,
+    "backup_dir": str,
+    "dry_run": bool,
+    "no_backup": bool,
+    "no_log": bool,
+}
+_STDIN_LIST_STR_KEYS = frozenset({"task", "patterns"})
+
+
+def _parse_env_bool(var: str, raw: str) -> bool:
+    value = raw.strip().lower()
+    if value in ("1", "true"):
+        return True
+    if value in ("0", "false"):
+        return False
+    raise ConfigError(f"环境变量 {var} 的值无效: {raw}（期望 1/0/true/false）")
+
+
+def _split_env_list(raw: str) -> list[str]:
+    """换行或分号分隔（cmd 无换行时用 ;），保序去空。"""
+    return [part.strip() for part in re.split(r"[\n;]", raw) if part.strip()]
+
+
+def read_env_overrides() -> dict[str, Any]:
+    """EFC_* 环境变量 → 覆盖字典（CLI 参数命名空间）；非法值 ConfigError。
+
+    空字符串视为未设置。传输级标志（format/non_interactive）与 CLI 层标志
+    （task/dry_run/yes）一并产出，由 cli 层消费；merged() 只映射 AppConfig 键。
+    """
+    out: dict[str, Any] = {}
+
+    def raw(var: str) -> str | None:
+        value = os.environ.get(var)
+        return value if value else None
+
+    if v := raw("EFC_CONFIG"):
+        out["config"] = v
+    if v := raw("EFC_FORMAT"):
+        if v not in ("text", "json"):
+            raise ConfigError(f"EFC_FORMAT 的值无效: {v}（期望 text/json）")
+        out["format"] = v
+    if v := raw("EFC_NON_INTERACTIVE"):
+        out["non_interactive"] = _parse_env_bool("EFC_NON_INTERACTIVE", v)
+    if v := raw("EFC_TASK"):
+        out["task"] = _split_env_list(v)
+    if v := raw("EFC_DIR"):
+        out["dir"] = v
+    if v := raw("EFC_PATTERNS"):
+        out["patterns"] = _split_env_list(v)
+    if v := raw("EFC_RECURSIVE"):
+        out["recursive"] = _parse_env_bool("EFC_RECURSIVE", v)
+    if v := raw("EFC_DRY_RUN"):
+        out["dry_run"] = _parse_env_bool("EFC_DRY_RUN", v)
+    if v := raw("EFC_YES"):
+        out["yes"] = _parse_env_bool("EFC_YES", v)
+    if v := raw("EFC_MAX_BATCH"):
+        try:
+            n = int(v.strip())
+        except ValueError as e:
+            raise ConfigError(
+                f"EFC_MAX_BATCH 的值无效: {v}（期望 1..{HARD_MAX_BATCH} 的整数）"
+            ) from e
+        if not 1 <= n <= HARD_MAX_BATCH:
+            raise ConfigError(
+                f"EFC_MAX_BATCH 的值无效: {v}（期望 1..{HARD_MAX_BATCH} 的整数）"
+            )
+        out["max_batch"] = n
+    if v := raw("EFC_BACKUP_DIR"):
+        out["backup_dir"] = v
+    if v := raw("EFC_LOG_FILE"):
+        out["log_file"] = v
+    return out
+
+
+def read_stdin_payload() -> dict[str, Any]:
+    """读取 --stdin JSON 负载并校验 Schema。
+
+    TTY 下使用 / 输入为空 / 非法 JSON / 非对象 / 未知键 / 类型不符 →
+    ConfigError；值为 null 的键原样返回（merged() 按 None 不覆盖跳过）。
+    """
+    stdin = sys.stdin
+    if stdin is None or stdin.isatty():
+        raise ConfigError("--stdin 只接受管道输入，不能在交互终端（TTY）下使用")
+    raw_text = stdin.read()
+    if not raw_text.strip():
+        raise ConfigError("--stdin 输入为空，需要 JSON 对象")
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        raise ConfigError(f"--stdin 输入不是合法 JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ConfigError("--stdin 输入必须是 JSON 对象")
+    for key, value in data.items():
+        if key not in _STDIN_SCHEMA:
+            raise ConfigError(f"--stdin 未知键: {key}")
+        if value is None:
+            continue
+        expected = _STDIN_SCHEMA[key]
+        if expected is list or key in _STDIN_LIST_STR_KEYS:
+            if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
+                raise ConfigError(f"--stdin 键 {key} 必须是字符串数组")
+        elif expected is int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ConfigError(f"--stdin 键 {key} 必须是整数")
+        elif not isinstance(value, expected):
+            raise ConfigError(f"--stdin 键 {key} 必须是 {expected.__name__}")
+    return data
