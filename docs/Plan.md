@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T009 已完成**，进度 9/27（9.5 / 37 人天 ≈ 25.7%）；下一任务 **T010**。
+> 当前状态：**T001-T010 已完成**，进度 10/27（10.5 / 37 人天 ≈ 28.4%）；下一任务 **T011**。
 
 ## 1. 里程碑
 
@@ -66,7 +66,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T002｜**工作量**：1.5 人天｜**产出**：`src/efc/safety.py`
 - **验收**：参数化 `sys.platform`：win32/darwin/linux 通过、aix → PlatformError；`is_unc` win True / posix False；`assess_risk` 覆盖 Spec §8 全矩阵（win+posix 保护根及后代、卷根 `C:\` 与 `/`、recursive 祖先、home 根高危但子目录不高危）；`validate_batch_size(11)` → ConfigError
 
-### T010 — 备份模块
+### T010 — 备份模块 ✅（2026-08-23）
 
 - **依赖**：T002｜**工作量**：1 人天｜**产出**：`src/efc/backup.py`
 - **验收**：保留相对结构；copy2 保留 mtime；manifest 字段完整（original/backup/status/size/error）；备份异常向上抛（cleaner 捕获）
