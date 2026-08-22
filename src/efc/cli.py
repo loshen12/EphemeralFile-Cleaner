@@ -349,17 +349,23 @@ def _effective(*layers: dict[str, Any]) -> dict[str, Any]:
     return eff
 
 
-def _gather(state: AgentState,
-             cli_layer: dict[str, Any]) -> tuple[AppConfig, dict[str, Any]]:
+def _gather(state: AgentState, cli_layer: dict[str, Any],
+            command: str | None = None) -> tuple[AppConfig, dict[str, Any]]:
     """读 env/stdin/CLI 三层 → (合并后的 AppConfig, 有效参数层)。
 
-    config 键同样按 CLI > stdin > env 决定配置文件路径。
+    config 键同样按 CLI > stdin > env 决定配置文件路径；stdin 负载的
+    command 与实际子命令不一致时 ConfigError（防误路由）。
     """
     env_layer = read_env_overrides()
     stdin_layer: dict[str, Any] = {}
     if state.stdin:
         payload = read_stdin_payload()
-        payload.pop("command", None)  # command 缺省取 CLI 子命令，不参与合并
+        payload_command = payload.pop("command", None)
+        if command is not None and payload_command is not None \
+                and payload_command != command:
+            raise ConfigError(
+                f"--stdin 负载 command={payload_command!r} 与子命令 {command!r} 不一致"
+            )
         stdin_layer = payload
     eff = _effective(env_layer, stdin_layer, cli_layer)
     config_path = eff.get("config")
@@ -469,7 +475,7 @@ def scan(
         cli_layer["recursive"] = recursive
     if config:
         cli_layer["config"] = config
-    cfg, eff = _gather(state, cli_layer)
+    cfg, eff = _gather(state, cli_layer, command="scan")
     targets = _resolve_targets(cfg, eff)
     payloads = []
     stderr_ui = ConsoleUI(console=Console(file=sys.stderr, no_color=False))
@@ -485,15 +491,16 @@ def scan(
 def _select_ui(state: AgentState, fmt: str, auto_yes: bool) -> UI:
     """UI 选择：--yes → AutoUI；--non-interactive → 无交互 ConsoleUI（高危仍拒）。
 
-    json 模式人读输出（表格/总结）一律走 stderr，stdout 只留信封。
+    非交互与 json 模式的人读输出（表格/总结）一律走 stderr——
+    --non-interactive 面向无头调用，json 模式 stdout 只留信封。
     """
     stderr_console = Console(file=sys.stderr, no_color=True)
     if auto_yes:
         return AutoUI()
     if state.non_interactive:
-        return ConsoleUI(interactive=False, no_color=True, progress=False)
+        return ConsoleUI(interactive=False, console=stderr_console, progress=False)
     if fmt == "json":
-        return ConsoleUI(console=stderr_console, no_color=True, progress=False)
+        return ConsoleUI(console=stderr_console, progress=False)
     return ConsoleUI()
 
 
@@ -551,7 +558,7 @@ def clean(
         cli_layer["dry_run"] = True
     if no_log:
         cli_layer["no_log"] = True
-    cfg, eff = _gather(state, cli_layer)
+    cfg, eff = _gather(state, cli_layer, command="clean")
     is_dry_run = bool(eff.get("dry_run"))
     if eff.get("no_backup"):
         cfg.backup_enabled = False
