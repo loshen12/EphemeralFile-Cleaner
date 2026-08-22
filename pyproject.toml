@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ephemeral-file-cleaner"
 version = "1.0.0"
-description = "Windows 专用的一次性/临时文件清理 CLI：回收站安全删除 + 删前备份 + 高危二次确认"
+description = "跨平台（Windows/macOS/Linux）临时文件清理 CLI：回收站安全删除 + 删前备份 + 高危二次确认 + 长期任务清单"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
