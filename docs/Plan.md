@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T012 已完成**，进度 12/27（12.5 / 37 人天 ≈ 33.8%）；下一任务 **T013**。
+> 当前状态：**T001-T013 已完成**，进度 13/27（15.5 / 37 人天 ≈ 41.9%）；下一任务 **T014**。
 
 ## 1. 里程碑
 
@@ -81,7 +81,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T002、T007｜**工作量**：1 人天｜**产出**：`src/efc/ui.py`
 - **验收**：AutoUI confirm→True、confirm_high_risk→False；ConsoleUI(no_color,progress) 不触发彩色；高危确认输入正确 normcase 路径→True、错误→False
 
-### T013 — 清理流水线
+### T013 — 清理流水线 ✅（2026-08-23）
 
 - **依赖**：T002、T007、T009、T010、T012｜**工作量**：3 人天｜**产出**：`src/efc/cleaner.py`
 - **验收**：Spec §7 十步全覆盖——高危+AutoUI→AbortError 零调用；备份失败未送 trash；trash 失败继续；confirm 拒绝 aborted；13 文件 max_batch=5 → 3 批（5/5/3）；批间拒绝停止；空间不足→AbortError 零调用；FileOutcome 携带 size/pattern、CleanOutcome 携带 task_name；scan 排除 backup_dir/log_file；dry_run 零 trash
