@@ -41,6 +41,7 @@ from efc.exceptions import ConfigError, EfcError
 from efc.journal import ExecutionLog, build_record
 from efc.models import CleanOutcome, ScanResult
 from efc.output import emit_error, emit_success
+from efc.repl import ReplSession
 from efc.safety import ensure_supported_platform
 from efc.scanner import compile_patterns
 from efc.scanner import scan as scan_dir
@@ -404,7 +405,8 @@ def repl(
             "repl 不支持 Agent 模式标志（--format json / --non-interactive / --stdin），"
             "自动化请使用 scan / clean"
         )
-    typer.echo("REPL 交互会话尚未接入（T019 将补齐 efc> 循环）")
+    cfg = load_config(Path(config).expanduser() if config else None)
+    ReplSession(cfg, ConsoleUI()).run()
 
 
 def main() -> None:
