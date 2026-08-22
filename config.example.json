@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "name": "downloads",
+      "dir": "D:\\Downloads",
+      "patterns": ["^~\\$", "\\.tmp$", "\\.bak$", "^Thumbs\\.db$"],
+      "recursive": true,
+      "default": true
+    },
+    {
+      "name": "mac-downloads",
+      "dir": "~/Downloads",
+      "patterns": ["^~\\$", "\\.tmp$"],
+      "recursive": false,
+      "default": false
+    }
+  ],
+  "confirm": true,
+  "max_batch": 5,
+  "backup_enabled": true,
+  "backup_dir": "~/.efc/backup",
+  "ignore_case": true,
+  "high_risk_dirs": [],
+  "log_enabled": true,
+  "log_file": ".efc.log"
+}

@@ -2,7 +2,8 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T026 已完成**，进度 26/27（35.5 / 37 人天 ≈ 96.0%）；下一任务 **T027**。
+> 当前状态：**T001-T027 全部完成**，进度 27/27（37 / 37 人天 = 100%）。v1.0.0 功能交付；
+> 三平台冒烟中 macOS 已本地实测（含真实回收站），Windows/Linux 待异地各一台补测 `--help` + `scan` + `clean --dry-run`。
 
 ## 1. 里程碑
 
@@ -11,9 +12,9 @@
 | M0 骨架（✅ 完成） | T001 | 可安装、`efc --help/--version` 可用、mypy 零错误 |
 | M1 数据与基础层（✅ 完成） | T002-T006、T007-T011 | models/exceptions/config(任务清单)/scanner/safety(三平台)/backup 及各自测试全绿 |
 | M2 清理引擎与输出（✅ 完成） | T012-T015 | Cleaner 流水线 + summary/journal/output 及测试全绿（fake 注入） |
-| M3 CLI 基础（首个可用版本） | T016-T020 | `efc scan/clean/repl`（text 模式）可用，CLI 测试全绿 |
-| M4 任务管理与 Agent 模式 | T021-T024 | `efc task */patterns`、多任务 clean、json/--stdin/--non-interactive 全量可用 |
-| M5 REPL 完整与收尾 | T025-T027 | REPL 全命令、全量测试、三平台冒烟、README/config.example.json 交付 |
+| M3 CLI 基础（✅ 完成） | T016-T020 | `efc scan/clean/repl`（text 模式）可用，CLI 测试全绿 |
+| M4 任务管理与 Agent 模式（✅ 完成） | T021-T024 | `efc task */patterns`、多任务 clean、json/--stdin/--non-interactive 全量可用 |
+| M5 REPL 完整与收尾（✅ 完成） | T025-T027 | REPL 全命令、全量测试、三平台冒烟、README/config.example.json 交付 |
 
 M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调用。
 
@@ -151,7 +152,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T025｜**工作量**：1 人天｜**产出**：`tests/test_repl.py`
 - **验收**：独立执行全绿；覆盖 Spec §14 test_repl 行全部用例
 
-### T027 — 文档与最终验证（三平台冒烟）
+### T027 — 文档与最终验证（三平台冒烟） ✅（2026-08-23，Windows/Linux 冒烟待异地补测）
 
 - **依赖**：T024、T026｜**工作量**：1.5 人天｜**产出**：`README.md`（三平台安装/快速上手/任务清单/config 说明/安全模型含平台差异/FAQ 含备份恢复与 `efc restore` Roadmap）、`config.example.json`
 - **验收**：`pytest -q` 全量通过（≥40 断言场景）；`grep -rn -E "os\.remove|os\.unlink|\.unlink\(|shutil\.rmtree|os\.rmdir" src/` 零结果；`EFC_REAL_TRASH=1 pytest` 本地支持平台通过；三平台（至少各一台）`--help`+`scan`+`clean --dry-run` 冒烟；PRD §8 验收清单逐条通过；`efc --version` 正常
