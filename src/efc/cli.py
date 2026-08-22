@@ -62,8 +62,22 @@ class AgentState:
     """传输级状态，经 ctx.obj 传递；只来自 CLI 与环境变量，不来自 stdin 负载。"""
 
     format: str = "text"
+    format_explicit: bool = False  # CLI 显式 --format（优先于子命令 --json 简写）
     non_interactive: bool = False
     stdin: bool = False
+
+
+def _command_fmt(state: AgentState, json_flag: bool) -> str:
+    """命令内格式裁定：显式 --format > 子命令 --json > EFC_FORMAT > text。
+
+    与 _resolve_format 的 argv 版语义一致，但不依赖 sys.argv
+    （CliRunner 直驱 app 时不改写 argv）。
+    """
+    if state.format_explicit:
+        return state.format
+    if json_flag:
+        return "json"
+    return state.format
 
 
 def _report_error(fmt: str, code: int, msg: str) -> None:
@@ -247,7 +261,7 @@ def scan(
 ) -> None:
     """扫描预览：列出各任务命中文件（只读，不删除）。"""
     state: AgentState = ctx.obj or AgentState()
-    fmt = _resolve_format()
+    fmt = _command_fmt(state, json_flag)
     cli_layer: dict[str, Any] = {}
     if task:
         cli_layer["task"] = list(task)
@@ -312,7 +326,7 @@ def clean(
 ) -> None:
     """清理：把命中文件移入回收站（删前备份，高危二次确认）。"""
     state: AgentState = ctx.obj or AgentState()
-    fmt = _resolve_format()
+    fmt = _command_fmt(state, False)
     cli_layer: dict[str, Any] = {}
     if task:
         cli_layer["task"] = list(task)
@@ -381,6 +395,7 @@ def main_options(
         if format_opt not in ("text", "json"):
             raise ConfigError(f"--format 的值无效: {format_opt}（期望 text/json）")
         state.format = format_opt
+        state.format_explicit = True
     elif (env_fmt := os.environ.get("EFC_FORMAT")) in ("text", "json"):
         state.format = env_fmt
     state.non_interactive = non_interactive or _env_flag("EFC_NON_INTERACTIVE")
