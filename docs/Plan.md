@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T015 已完成**，进度 15/27（19.5 / 37 人天 ≈ 52.7%）；下一任务 **T016**。
+> 当前状态：**T001-T016 已完成**，进度 16/27（21 / 37 人天 ≈ 56.8%）；下一任务 **T017**。
 
 ## 1. 里程碑
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | M0 骨架（✅ 完成） | T001 | 可安装、`efc --help/--version` 可用、mypy 零错误 |
 | M1 数据与基础层（✅ 完成） | T002-T006、T007-T011 | models/exceptions/config(任务清单)/scanner/safety(三平台)/backup 及各自测试全绿 |
-| M2 清理引擎与输出 | T012-T015 | Cleaner 流水线 + summary/journal/output 及测试全绿（fake 注入） |
+| M2 清理引擎与输出（✅ 完成） | T012-T015 | Cleaner 流水线 + summary/journal/output 及测试全绿（fake 注入） |
 | M3 CLI 基础（首个可用版本） | T016-T020 | `efc scan/clean/repl`（text 模式）可用，CLI 测试全绿 |
 | M4 任务管理与 Agent 模式 | T021-T024 | `efc task */patterns`、多任务 clean、json/--stdin/--non-interactive 全量可用 |
 | M5 REPL 完整与收尾 | T025-T027 | REPL 全命令、全量测试、三平台冒烟、README/config.example.json 交付 |
@@ -96,7 +96,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T013、T014｜**工作量**：2 人天｜**产出**：`tests/test_cleaner.py`、`test_summary.py`、`test_journal.py`、`test_output.py`
 - **验收**：四文件独立执行全绿；覆盖 Spec §14 对应行（合计 ≥30 断言场景）
 
-### T016 — CLI 基础：全局回调与异常处理入口
+### T016 — CLI 基础：全局回调与异常处理入口 ✅（2026-08-23）
 
 - **依赖**：T002、T014｜**工作量**：1.5 人天｜**产出**：`cli.py` 骨架（app/callback/AgentState/_resolve_format/main/repl 入口）
 - **验收**：`--format json --help` 输出人类文本；`--non-interactive --stdin repl` → exit 2；UsageError json → `{"code":2}` + exit 2；未知异常 → code 1；不支持平台 → exit 2；`_resolve_format` 不依赖 callback
