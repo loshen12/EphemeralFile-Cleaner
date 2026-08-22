@@ -2,14 +2,14 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T011 已完成**，进度 11/27（11.5 / 37 人天 ≈ 31.1%）；下一任务 **T012**。
+> 当前状态：**T001-T012 已完成**，进度 12/27（12.5 / 37 人天 ≈ 33.8%）；下一任务 **T013**。
 
 ## 1. 里程碑
 
 | 里程碑 | 范围 | 出口条件 |
 |---|---|---|
 | M0 骨架（✅ 完成） | T001 | 可安装、`efc --help/--version` 可用、mypy 零错误 |
-| M1 数据与基础层 | T002-T006、T007-T011 | models/exceptions/config(任务清单)/scanner/safety(三平台)/backup 及各自测试全绿 |
+| M1 数据与基础层（✅ 完成） | T002-T006、T007-T011 | models/exceptions/config(任务清单)/scanner/safety(三平台)/backup 及各自测试全绿 |
 | M2 清理引擎与输出 | T012-T015 | Cleaner 流水线 + summary/journal/output 及测试全绿（fake 注入） |
 | M3 CLI 基础（首个可用版本） | T016-T020 | `efc scan/clean/repl`（text 模式）可用，CLI 测试全绿 |
 | M4 任务管理与 Agent 模式 | T021-T024 | `efc task */patterns`、多任务 clean、json/--stdin/--non-interactive 全量可用 |
@@ -76,7 +76,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T009、T010｜**工作量**：1 人天｜**产出**：`tests/test_safety.py`、`tests/test_backup.py`
 - **验收**：独立执行全绿；覆盖 Spec §14 对应行（含 monkeypatch ismount 模拟挂载点）
 
-### T012 — UI 模块
+### T012 — UI 模块 ✅（2026-08-23）
 
 - **依赖**：T002、T007｜**工作量**：1 人天｜**产出**：`src/efc/ui.py`
 - **验收**：AutoUI confirm→True、confirm_high_risk→False；ConsoleUI(no_color,progress) 不触发彩色；高危确认输入正确 normcase 路径→True、错误→False
