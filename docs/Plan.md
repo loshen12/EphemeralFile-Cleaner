@@ -2,7 +2,7 @@
 
 > 版本：v2.0（2026-08-22）｜基于 PRD.md + Spec.md，替代原 plan.md（v1.1 重写版）
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
-> 当前状态：**T001-T003 已完成**，进度 3/27（2.5 / 37 人天 ≈ 6.8%）；下一任务 **T004**。
+> 当前状态：**T001-T004 已完成**，进度 4/27（4 / 37 人天 ≈ 10.8%）；下一任务 **T005**。
 
 ## 1. 里程碑
 
@@ -36,7 +36,7 @@ M3 后即获得可日常使用的 CLI；M4 完成后 Agent 可接手自动化调
 - **依赖**：T002｜**工作量**：1.5 人天｜**产出**：`config.py`（AppConfig/Task/load_config/merged/save_config/validate）
 - **验收**：合法 JSON → 正确 AppConfig（含 tasks 与 `~` 展开）；`max_batch=11` → ConfigError；缺配置文件 → 默认值不报错；指定路径不存在 → ConfigError；save 原子写且只含持久化字段；任务名重复、v1.0 旧顶层键 → ConfigError
 
-### T004 — 任务清单持久化：任务的增删查
+### T004 — 任务清单持久化：任务的增删查 ✅（2026-08-23）
 
 - **依赖**：T003｜**工作量**：1.5 人天｜**产出**：`config.py` 新增 add_task/remove_task/list_tasks/resolve_task/default_tasks
 - **验收**：新建（dir 必填）与同名更新（仅覆盖显式字段）；追加去重 / replace_patterns 整体替换；default 标记设置与保持；remove 后 list 不含；resolve 未知名 → ConfigError；default_tasks 只含 default=True 且按序；校验失败不写盘

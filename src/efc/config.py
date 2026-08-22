@@ -1,4 +1,4 @@
-"""配置系统（Spec §4）：AppConfig/Task 数据模型、加载/合并/校验/保存。
+"""配置系统（Spec §4）：AppConfig/Task 数据模型、加载/合并/校验/保存、任务清单增删查。
 
 任务清单 tasks[] 是任务唯一持久化形式；v1.0 顶层默认目标字段
 （target_dir/filename_patterns/recursive）出现在 config.json 即 ConfigError。
@@ -6,6 +6,7 @@
 
 import json
 import os
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -313,3 +314,116 @@ def save_config(cfg: AppConfig, path: Path) -> None:
         raise ConfigError(
             f"配置写入失败: {path}（{e}；临时文件可能残留于 {tmp}）"
         ) from e
+
+
+# ---------- 任务清单：增删查 ----------
+
+
+def _dedup(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
+def _compile_check(patterns: list[str]) -> None:
+    for p in patterns:
+        try:
+            re.compile(p)
+        except re.error as e:
+            raise ConfigError(f"非法正则 {p!r}: {e}") from e
+
+
+def _existing_dir(value: str | Path, name: str) -> Path:
+    p = _expand(value)
+    if not p.exists():
+        raise ConfigError(f"任务 {name} 的目录不存在: {p}")
+    return p
+
+
+def add_task(
+    cfg: AppConfig,
+    *,
+    name: str,
+    dir: str | Path | None = None,
+    patterns: list[str] | None = None,
+    recursive: bool | None = None,
+    default: bool | None = None,
+    replace_patterns: bool = False,
+) -> None:
+    """新增（dir 必填且必须存在）/同名更新（仅覆盖显式字段）。
+
+    patterns 默认追加去重，replace_patterns=True 整体替换；default=None 不动
+    标记。任何校验失败（dir 不存在、正则不可编译、整体 validate 不过）抛
+    ConfigError 且不改动 cfg——是否落盘由调用方随后调用 save_config 决定。
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ConfigError("任务 name 必须是非空字符串")
+    name = name.strip()
+    incoming = list(patterns or [])
+    existing = next((t for t in cfg.tasks if t.name == name), None)
+    if existing is None:
+        if dir is None:
+            raise ConfigError(f"新增任务 {name} 必须指定 dir")
+        task = Task(
+            name=name,
+            dir=_existing_dir(dir, name),
+            patterns=_dedup(incoming),
+            recursive=bool(recursive),
+            default=bool(default),
+        )
+        new_tasks = [*cfg.tasks, task]
+    else:
+        task = Task(
+            name=existing.name,
+            dir=_existing_dir(dir, name) if dir is not None else existing.dir,
+            patterns=(
+                _dedup(incoming)
+                if replace_patterns
+                else _dedup([*existing.patterns, *incoming])
+            ),
+            recursive=existing.recursive if recursive is None else recursive,
+            default=existing.default if default is None else default,
+        )
+        new_tasks = [task if t.name == name else t for t in cfg.tasks]
+    _compile_check(task.patterns)
+    validate(replace(cfg, tasks=new_tasks))
+    cfg.tasks = new_tasks
+
+
+def remove_task(
+    cfg: AppConfig, *, name: str | None = None, dir: str | Path | None = None
+) -> bool:
+    """按 name 或 dir（normcase 比对）移除任务；返回是否移除了任务。"""
+    before = len(cfg.tasks)
+    if name is not None and dir is None:
+        cfg.tasks = [t for t in cfg.tasks if t.name != name]
+    elif dir is not None and name is None:
+        needle = _norm_path(dir)
+        cfg.tasks = [
+            t for t in cfg.tasks if t.dir is None or _norm_path(t.dir) != needle
+        ]
+    else:
+        raise ConfigError("必须且只能指定 name 或 dir 之一")
+    return len(cfg.tasks) < before
+
+
+def list_tasks(cfg: AppConfig) -> list[Task]:
+    """按配置顺序返回任务清单副本。"""
+    return list(cfg.tasks)
+
+
+def resolve_task(cfg: AppConfig, name: str) -> Task:
+    """按名取任务；未知名 → ConfigError。"""
+    for task in cfg.tasks:
+        if task.name == name:
+            return task
+    raise ConfigError(f"任务不存在: {name}")
+
+
+def default_tasks(cfg: AppConfig) -> list[Task]:
+    """default=True 的任务，按配置顺序。"""
+    return [t for t in cfg.tasks if t.default]
