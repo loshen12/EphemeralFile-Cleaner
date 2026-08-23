@@ -4,6 +4,7 @@
 > 任务编号 T001-T027 保持不变，提交 Footer 沿用 `Task: Txxx`。
 > 当前状态：**T001-T027 全部完成**，进度 27/27（37 / 37 人天 = 100%）。v1.0.0 功能交付；
 > 三平台冒烟中 macOS 已本地实测（含真实回收站），Windows/Linux 待异地各一台补测 `--help` + `scan` + `clean --dry-run`。
+> 交付验收：见 [Delivery-Report-v1.0.0.md](Delivery-Report-v1.0.0.md)（含实现差异、技术债务与待人工复核清单）；Spec §16 记录交付变更备注。
 
 ## 1. 里程碑
 

@@ -486,3 +486,33 @@ target 需已 `resolve()`；满足任一即 high_risk（reason 给人话原因�
 ## 15. 附录：config.example.json
 
 见 §4.1（随仓库提供同名文件，与实现保持一致）。
+
+## 16. 变更备注（v1.0.0 交付，2026-08-23）
+
+实现与本文的偏差逐条记录（均为交付评审时的实现决策，行为兼容或为附加约束；详见交付验收报告
+`docs/Delivery-Report-v1.0.0.md`）：
+
+1. **§5 Cleaner 构造签名**：新增关键字参数 `dry_run: bool = False`、`task_name: str | None = None`。
+   原因：AppConfig 无 dry_run 字段（属传输级标志）、CleanOutcome.task_name 需由任务解析层注入；
+   以构造注入保持 `run()` 签名不变。
+2. **§3 dry_run 语义**：dry_run 产出 `results=[]`（不新增 "dry_run" 状态值），命中总量经
+   `total_matched` 传递；不建备份目录、不写 manifest（零副作用）。
+3. **§5 ConsoleUI 构造开关**：在 no_color/progress/interactive 之外新增注入点 `input_fn`、`console`
+   （测试无 mock input、json/非交互模式 stderr 路由），默认行为不变。
+4. **§6.4 main() 错误出口**：实现为两层——命令层 `_translate` 装饰器把 EfcError 转为「按格式报告 +
+   typer.Exit(exit_code)」（保证 CliRunner 与真实入口退出码一致）；main() 兜底 UsageError→2 /
+   EfcError→exit_code / Abort→3 / 未预期异常→1；click 无参数时抛 NoArgsIsHelpError，特判为 exit 0。
+5. **§6.1/§6.4 json 模式确认策略（附加约束）**：`--format json clean` 未携带 `--yes` 或
+   `--non-interactive` 之一时 exit 2——防止交互提示污染 stdout 单行信封，亦防隐式放行删除。
+6. **§4.4 stdin 负载（附加校验）**：负载 `command` 与实际子命令不一致 → ConfigError（原文仅约定缺省取子命令）。
+7. **§4.2/§4.4 附加严格性**：config.json 未知顶层键 → ConfigError；EFC_* 环境变量空字符串视为未设置。
+8. **§10 REPL**：会话内 clean 的执行日志 `JournalRecord.command` 记为 `"repl"`（区分会话来源）；
+   输入经 shlex 解析，正则含反斜杠需引号包裹（如 `pattern '\.tmp$'`）。
+9. **§1 依赖环境**：typer>=0.27 起内置 click（无独立 click 包），UsageError/NoArgsIsHelpError 自
+   `typer._click.exceptions` 导入；dev 依赖新增 `types-Send2Trash`（mypy strict）。
+   【待人工复核】pyproject 声明 `typer[all]>=0.12`，但 `typer._click` 仅 0.27+ 存在，下界与实现不匹配。
+10. **§6.4 AgentState**：内部新增 `format_explicit` 字段用于「显式 --format 优先于子命令 --json」的
+    命令内格式裁定（CliRunner 直驱 app 不改写 sys.argv，命令内不使用 `_resolve_format`）。
+11. **§14 验收 grep 范围**：`grep -rn -E "os\.remove|os\.unlink|\.unlink\(|shutil\.rmtree|os\.rmdir" src/`
+    会在构建产物 `src/*.egg-info/PKG-INFO`（内嵌 README 文案，已 gitignore、可再生）产生 1 次文本
+    命中；源码级验收应限定 `src/efc/`（当前源码命中为 0）。
