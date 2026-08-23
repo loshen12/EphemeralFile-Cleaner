@@ -2,7 +2,7 @@
 
 **跨平台（Windows / macOS / Linux）**的临时文件清理 CLI 工具：以**任务**为单位组织清理——每个任务 = 目标目录 + 一组文件名正则。任务可持久化为**长期任务清单**（`efc task add`，可反复执行），其中标记 `default: true` 的任务构成**默认任务清单**（无参数执行时自动运行）；也可每次一次性明确（`--dir` + `--pattern`，不落盘）。执行时递归（可选）扫描，把文件名匹配任一正则的文件移入**系统回收站**（仅允许 `send2trash`，硬删除 API 全项目禁用）。删除前自动备份并写入 manifest，高危目录需二次确认，单次执行按小批量（≤10 个/批）分批推进。
 
-> 文档体系：[docs/PRD.md](docs/PRD.md)（业务需求）→ [docs/Spec.md](docs/Spec.md)（技术方案）→ [docs/Plan.md](docs/Plan.md)（开发计划）。
+> 文档体系：[USAGE.md](USAGE.md)（使用文档）｜[docs/PRD.md](docs/PRD.md)（业务需求）→ [docs/Spec.md](docs/Spec.md)（技术方案）→ [docs/Plan.md](docs/Plan.md)（开发计划）。
 
 ## 安装
 
